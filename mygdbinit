@@ -1,0 +1,6 @@
+set architecture i386:x86-64
+add-symbol-file linux/vmlinux
+gef-remote --qemu-mode localhost:1234
+
+# b start_kernel
+c

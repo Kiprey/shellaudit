@@ -1,0 +1,16 @@
+# 编译驱动增加的中间代码
+modules.order 
+shelllog.mod 
+shelllog.o 
+shelllog.mod.c
+Module.symvers
+.shelllog.mod.cmd
+.shelllog.o.cmd
+shelllog.ko
+
+# 守护进程可执行文件
+shelllogd
+
+# 其他文件
+.vscode/
+.gdb_history
