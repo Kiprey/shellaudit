@@ -7,6 +7,11 @@ Module.symvers
 .shelllog.mod.cmd
 .shelllog.o.cmd
 shelllog.ko
+.Module.symvers.cmd
+.modules.order.cmd
+.shelllog.ko.cmd
+.shelllog.mod.o.cmd
+shelllog.mod.o
 
 # 守护进程可执行文件
 shelllogd
