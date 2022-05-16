@@ -12,6 +12,7 @@ shelllog.ko
 .shelllog.ko.cmd
 .shelllog.mod.o.cmd
 shelllog.mod.o
+.shelllog.o.d
 
 # 守护进程可执行文件
 shelllogd

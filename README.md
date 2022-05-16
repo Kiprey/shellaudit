@@ -32,7 +32,7 @@
 
 ### 1. shelllog.ko
 
-1. 在 load 时自动 hook SYS_execve 
+1. 在 load 时自动使用 kprob 探针劫持 execve 相关函数。 
 2. 当有控制流执行 SYS_execve 时，自动获取其 
     1. path
     2. 参数
@@ -40,7 +40,7 @@
     4. 调用者信息
     5. 父进程链
    并将该信息通过 netlink 传给守护进程。若不存在守护进程，则不发送任何信息。
-3. 在 unload 时自动 unhook。
+3. 在 unload 时自动解除探针。
 
 ### 2. shelllogd
 
