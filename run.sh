@@ -1,5 +1,8 @@
 #! /bin/bash
 
+# shell脚本报错即刻退出
+set -o errexit
+
 # 判断当前权限是否为 root，需要高权限以执行 gef-remote --qemu-mode
 user=$(env | grep "^USER" | cut -d "=" -f 2)
 if [ "$user" != "root"  ]
@@ -21,7 +24,7 @@ pushd linux/busybox-1.34.1/_install
 find . | cpio -o --format=newc > ../../rootfs.img
 popd
 
-gnome-terminal -e 'gdb -x mygdbinit'
+# gnome-terminal -e 'gdb -x mygdbinit'
 
 # 启动 qemu
 qemu-system-x86_64 \
@@ -30,7 +33,6 @@ qemu-system-x86_64 \
     -append "nokaslr" \
     -m 2G \
     -s  \
-    -S \
     -nographic -append "console=ttyS0"
 
     # -s ： 等价于 -gdb tcp::1234， 指定 qemu 的调试链接

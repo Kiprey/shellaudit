@@ -24,6 +24,7 @@ using namespace std;
 #define DAEMON
 
 #define NETLINK_PROTOCOL 30
+#define USER_PORT 100
 /*
 
     // create netlink socket
@@ -86,7 +87,7 @@ void log(string &&msg, int level = NO_ERROR)
     close(fd);
 }
 
-void start_work(int _protocol = NETLINK_PROTOCOL, unsigned int _saddr_nl_pid = 100)
+void start_work(int _protocol = NETLINK_PROTOCOL, unsigned int _saddr_nl_pid = USER_PORT)
 {
     int skfd;
     skfd = socket(AF_NETLINK, SOCK_RAW, _protocol);
