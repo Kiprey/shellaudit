@@ -160,6 +160,7 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
 
     char** kargv, ** kenv;
     int kargc, kenvc;
+    struct task_struct * curr;
     
     execve_regs = (struct pt_regs*)regs->di;
 
@@ -170,6 +171,7 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     copylen = strncpy_from_user(kfilename, filename, len + 1);
     assert(copylen <= len);
 
+    LOG("===============================\n");
     LOG("execve path: %s\n", kfilename);
 
     // 2. 获取参数
@@ -217,6 +219,14 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     LOG("root: %s\n", retp);
 
     // 8. 获取 parent tree
+    LOG("Process Tree:\t");
+    curr = current;
+    for(int i = 1; curr; i++) {
+        // 输出当前进程名与 PID
+        LOG("\t %d: %s(%d)\n", i, curr->comm, curr->pid);
+        // 将指针更新至父进程
+        curr = (curr == curr->real_parent ? NULL : curr->real_parent);
+    }
     
     // TODO 发送信息
 
