@@ -108,6 +108,7 @@ int copy_strings(unsigned long reg, char*** buf) {
     const char __user *p;
     int nr = 0, len = 0, copylen = 0;
     char **newbuf;
+    int i;
 
     if(userp == NULL)
         return 0;
@@ -130,7 +131,7 @@ int copy_strings(unsigned long reg, char*** buf) {
     newbuf[nr] = NULL;
 
     // 复制参数
-    for(int i = 0; i < nr; i++) {
+    for(i = 0; i < nr; i++) {
         if (get_user(p, userp + i))
             return -EFAULT;
         len = strnlen_user(p, MAX_ARG_STRLEN);
@@ -144,7 +145,8 @@ int copy_strings(unsigned long reg, char*** buf) {
 }
 
 void free_strings(char** ptrs, int size) {
-    for(int i = 0; i < size; i++) {
+    int i;
+    for(i = 0; i < size; i++) {
         kfree(ptrs[i]);
     }
     kfree(ptrs);
@@ -164,6 +166,7 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     char** kargv, ** kenv;
     int kargc, kenvc;
     struct task_struct * curr;
+    int i;
     
     execve_regs = (struct pt_regs*)regs->di;
 
@@ -183,7 +186,7 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
         return kargc;
 
     LOG("arguments: \n");
-    for(int i = 0; i < kargc; i++)
+    for(i = 0; i < kargc; i++)
         LOG("\targv%d: %s\n", i, kargv[i]);
 
     // 3. 获取环境变量
@@ -192,7 +195,7 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
         return kenvc;
 
     LOG("environments: \n");
-    for(int i = 0; i < kenvc; i++)
+    for(i = 0; i < kenvc; i++)
         LOG("\tenv%d: %s\n", i, kenv[i]);
 
     // 4. 获取 PID
@@ -224,7 +227,7 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     // 8. 获取 parent tree
     LOG("Process Tree:\t");
     curr = current;
-    for(int i = 1; curr; i++) {
+    for(i = 1; curr; i++) {
         // 输出当前进程名与 PID
         LOG("\t %d: %s(%d)\n", i, curr->comm, curr->pid);
         // 将指针更新至父进程
