@@ -109,6 +109,9 @@ int copy_strings(unsigned long reg, char*** buf) {
     int nr = 0, len = 0, copylen = 0;
     char **newbuf;
 
+    if(userp == NULL)
+        return 0;
+
     // 获取长度
     for (;;) {
         if (get_user(p, userp + nr))
@@ -123,7 +126,7 @@ int copy_strings(unsigned long reg, char*** buf) {
     }
     
     // 分配内存
-    newbuf = (char **)kmalloc(nr + 1, GFP_KERNEL);
+    newbuf = (char **)kmalloc(sizeof(char*) * (nr + 1), GFP_KERNEL);
     newbuf[nr] = NULL;
 
     // 复制参数
@@ -251,7 +254,7 @@ static int do_register_kprobe(struct kprobe* kp, char* symbol_name, void* handle
         return ret;
     }
 
-    DEBUG("Planted krpobe for symbol %s at %p\n", symbol_name, kp->addr);
+    DEBUG("Planted krpobe for symbol %s at %px\n", symbol_name, kp->addr);
 
     return ret;
 }
@@ -280,6 +283,7 @@ static int __init shelllog_init(void)
 static void __exit shelllog_exit(void)
 {
     DEBUG("mod exit\n");
+    netlink_kernel_release(nlsk);
     unregister_kprobe(&kp_execveat);
 }
 
