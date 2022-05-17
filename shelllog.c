@@ -25,6 +25,12 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define ERR(x...) \
     pr_err("shelllog: " x)
 
+#define assert(expr) \
+    if (unlikely(!(expr))) {				\
+        ERR("Assertion failed! %s,%s,%s,line=%d\n",	\
+                #expr, __FILE__, __func__, __LINE__);	\
+    }
+
 // linux/fs/exec.c
 // linux/arch/x86/include/asm/ptrace.h:59
 
@@ -89,27 +95,104 @@ int netlink_send_msg(char *pbuf, uint16_t len)
     return ret;
 }
 
+// 复制字符串指针
+#define MAX_ARG_STRLEN (PAGE_SIZE * 32)
+#define MAX_ARG_STRINGS 0x7FFFFFFF
+int copy_strings(const char __user *const __user * userp, char*** buf) {
+    const char __user *p;
+    int nr = 0, len = 0, copylen = 0;
+    char **newbuf;
+
+    // 获取长度
+    for (;;) {
+        if (get_user(p, userp + nr))
+            return -EFAULT;
+
+        if (!p)
+            break;
+
+        if (nr >= MAX_ARG_STRINGS)
+            return -E2BIG;
+        ++nr;
+    }
+    
+    // 分配内存
+    newbuf = (char **)kmalloc(nr + 1, GFP_KERNEL);
+    newbuf[nr] = NULL;
+
+    // 复制参数
+    for(int i = 0; i < nr; i++) {
+        if (get_user(p, userp + i))
+            return -EFAULT;
+        len = strnlen_user(p, MAX_ARG_STRLEN);
+        newbuf[i] = kmalloc(len + 1, GFP_KERNEL);
+        copylen = strncpy_from_user(newbuf[i], p, len + 1);
+        assert(copylen <= len);
+    }
+
+    *buf = newbuf;
+    return nr;
+}
+
+void free_strings(char** ptrs, int size) {
+    for(int i = 0; i < size; i++) {
+        kfree(ptrs[i]);
+    }
+    kfree(ptrs);
+}
+
 // 进行挂钩处理
-static int __kprobes log_execveat(struct kprobe *p, struct pt_regs *regs) {
-    /*
-    int fd = regs->di;
-    struct filename * filename = regs->si;
-    struct user_arg_ptr argv = regs->dx;
-	struct user_arg_ptr envp = regs->cx;
-    int flags = regs->r8;
 
-    const char __user *const __user *__argv = argv.,
-	const char __user *const __user *__envp
+// extern long __x64_##sym(const struct pt_regs *)
+static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
+    char *kfilename;
+    long len, copylen;
 
-    LOG("execve path: %px\n", (char*)regs->di);
-    print_hex_dump(
-        KERN_INFO, "execve path: ", DUMP_PREFIX_OFFSET, 
-        16, 1, (char*)regs->di, 0x30, true);
-    */
+    struct pt_regs* execve_regs;
+    const char __user *filename;
+    const char __user *const __user * argv;
+    const char __user *const __user *  env;
 
-    // TODO
-    char str[0x20] = "execveat triggered.";
-    netlink_send_msg(str, strlen(str) + 1);
+    char** kargv, ** kenv;
+    int kargc, kenvc;
+    
+    execve_regs = (struct pt_regs*)regs->di;
+
+    // 获取路径
+    filename = (char*) execve_regs->di;
+    len = strnlen_user(filename, PATH_MAX);
+    kfilename = kmalloc(len + 1, GFP_KERNEL);
+    copylen = strncpy_from_user(kfilename, filename, len + 1);
+    assert(copylen <= len);
+
+    LOG("execve path: %s\n", kfilename);
+
+    // 获取参数
+    argv = (const char __user *const __user *) execve_regs->si;
+    kargc = copy_strings(argv, &kargv);
+    if(kargc < 0)
+        return kargc;
+
+    LOG("arguments: \n");
+    for(int i = 0; i < kargc; i++)
+        LOG("\targv%d: %s\n", i, kargv[i]);
+
+    // 获取环境变量
+    env =  (const char __user *const __user *) execve_regs->dx;
+    kenvc = copy_strings(env, &kenv);
+    if(kenvc < 0)
+        return kenvc;
+
+    LOG("environments: \n");
+    for(int i = 0; i < kenvc; i++)
+        LOG("\tenv%d: %s\n", i, kenv[i]);
+    
+    // TODO 发送信息
+
+    // 回收资源
+    kfree(kfilename);   
+    free_strings(kargv, kargc);
+    free_strings(kenv, kenvc);
 
     return 0;
 }
@@ -146,7 +229,7 @@ static int __init shelllog_init(void)
         return -1; 
     } 
 
-    status  = do_register_kprobe(&kp_execveat, "do_execveat_common", log_execveat);
+    status  = do_register_kprobe(&kp_execveat, "__x64_sys_execve", log_execve);
     if (status < 0) 
         return -1;
 

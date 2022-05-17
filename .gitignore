@@ -1,18 +1,9 @@
 # 编译驱动增加的中间代码
-modules.order 
-shelllog.mod 
-shelllog.o 
-shelllog.mod.c
-Module.symvers
-.shelllog.mod.cmd
-.shelllog.o.cmd
-shelllog.ko
-.Module.symvers.cmd
-.modules.order.cmd
-.shelllog.ko.cmd
-.shelllog.mod.o.cmd
-shelllog.mod.o
-.shelllog.o.d
+*.o*
+*.ko* 
+*.mod* 
+*.symvers*
+*.order*
 
 # 守护进程可执行文件
 shelllogd
