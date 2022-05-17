@@ -11,7 +11,7 @@
 #include <linux/selinux_netlink.h>
 #include <net/net_namespace.h>
 #include <net/netlink.h>
-
+#include <linux/fs_struct.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -20,6 +20,9 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define USER_PORT 100
 
 #define LOG(x...) \
+    pr_info("shelllog: " x)
+
+#define DEBUG(x...) \
     pr_info("shelllog: " x)
 
 #define ERR(x...) \
@@ -98,7 +101,10 @@ int netlink_send_msg(char *pbuf, uint16_t len)
 // 复制字符串指针
 #define MAX_ARG_STRLEN (PAGE_SIZE * 32)
 #define MAX_ARG_STRINGS 0x7FFFFFFF
-int copy_strings(const char __user *const __user * userp, char*** buf) {
+int copy_strings(unsigned long reg, char*** buf) {
+    const char __user *const __user * userp = 
+        (const char __user *const __user *) reg;
+
     const char __user *p;
     int nr = 0, len = 0, copylen = 0;
     char **newbuf;
@@ -145,20 +151,19 @@ void free_strings(char** ptrs, int size) {
 
 // extern long __x64_##sym(const struct pt_regs *)
 static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
-    char *kfilename;
+    char *kfilename, *retp;
+    char kpath[0x100];
     long len, copylen;
 
     struct pt_regs* execve_regs;
     const char __user *filename;
-    const char __user *const __user * argv;
-    const char __user *const __user *  env;
 
     char** kargv, ** kenv;
     int kargc, kenvc;
     
     execve_regs = (struct pt_regs*)regs->di;
 
-    // 获取路径
+    // 1. 获取路径
     filename = (char*) execve_regs->di;
     len = strnlen_user(filename, PATH_MAX);
     kfilename = kmalloc(len + 1, GFP_KERNEL);
@@ -167,9 +172,8 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
 
     LOG("execve path: %s\n", kfilename);
 
-    // 获取参数
-    argv = (const char __user *const __user *) execve_regs->si;
-    kargc = copy_strings(argv, &kargv);
+    // 2. 获取参数
+    kargc = copy_strings(execve_regs->si, &kargv);
     if(kargc < 0)
         return kargc;
 
@@ -177,15 +181,42 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     for(int i = 0; i < kargc; i++)
         LOG("\targv%d: %s\n", i, kargv[i]);
 
-    // 获取环境变量
-    env =  (const char __user *const __user *) execve_regs->dx;
-    kenvc = copy_strings(env, &kenv);
+    // 3. 获取环境变量
+    kenvc = copy_strings(execve_regs->dx, &kenv);
     if(kenvc < 0)
         return kenvc;
 
     LOG("environments: \n");
     for(int i = 0; i < kenvc; i++)
         LOG("\tenv%d: %s\n", i, kenv[i]);
+
+    // 4. 获取 PID
+    // linux/include/linux/sched.h task_structs
+    LOG("pid: %d\n", current->pid);
+
+    // 5. 获取 cred
+    // linux/include/linux/cred.h
+    LOG("uid: %d, gid: %d, suid: %d, sgid: %d,"
+        "euid: %d, egid: %d, fsuid: %d, fsgid: %d\n", 
+        current_uid().val, current_gid().val, current_suid().val, current_sgid().val,
+        current_euid().val, current_egid().val, current_fsuid().val, current_fsgid().val);
+
+    // 6. 获取 pwd
+    retp = d_path(&current->fs->pwd, kpath, sizeof(kpath));
+    if (IS_ERR(retp)) {
+        DEBUG("get pwd fail\n");
+        return -1;
+    }
+    LOG("pwd: %s\n", retp);
+    // 7. 获取 chroot
+    retp = d_path(&current->fs->root, kpath, sizeof(kpath));
+    if (IS_ERR(retp)) {
+        DEBUG("get pwd fail\n");
+        return -1;
+    }
+    LOG("root: %s\n", retp);
+
+    // 8. 获取 parent tree
     
     // TODO 发送信息
 
@@ -210,7 +241,7 @@ static int do_register_kprobe(struct kprobe* kp, char* symbol_name, void* handle
         return ret;
     }
 
-    LOG("Planted krpobe for symbol %s at %p\n", symbol_name, kp->addr);
+    DEBUG("Planted krpobe for symbol %s at %p\n", symbol_name, kp->addr);
 
     return ret;
 }
@@ -219,7 +250,7 @@ static int __init shelllog_init(void)
 {
     int status;
 
-    LOG("mod start\n");
+    DEBUG("mod start\n");
 
     /* create netlink socket */
     nlsk = (struct sock *)netlink_kernel_create(&init_net, NETLINK_PROTOCOL, &cfg);
@@ -238,7 +269,7 @@ static int __init shelllog_init(void)
 
 static void __exit shelllog_exit(void)
 {
-    LOG("mod exit\n");
+    DEBUG("mod exit\n");
     unregister_kprobe(&kp_execveat);
 }
 
