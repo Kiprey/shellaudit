@@ -70,6 +70,32 @@
 之后运行 `insmod shelllog.ko` 安装内核驱动，并手动启动 shelllogd 守护进程。
 > 这一步可以直接添加进 init 脚本中做到开机自启，无需每次启动时都需要手动运行。
 
+生成的日志如下所示：
+
+```bash
+2022-05-31 11:41:40 [INFO]: ===============================
+execve path: /bin/cttyhack
+arguments: 
+    argv0: /bin/cttyhack
+    argv1: setuidgid
+    argv2: 0
+    argv3: /bin/sh
+environments: 
+    env0: SHLVL=1
+    env1: HOME=/
+    env2: TERM=linux
+    env3: PWD=/
+pid: 80
+uid: 0, gid: 0, suid: 0, sgid: 0,euid: 0, egid: 0, fsuid: 0, fsgid: 0
+pwd: /
+root: /
+Process Tree:           
+    1: setsid(80)
+    2: init(1)
+    3: swapper/0(0)
+
+```
+
 可以运行 `rmmod shelllog` 以卸载驱动程序。
 
 若需要强制关闭嵌入在终端的 QEMU，则先按下 ctrl + a，**松手** 再按下 x 即可关闭 QEMU。

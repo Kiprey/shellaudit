@@ -18,9 +18,14 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define DRIVERNAME "shelllog"
 #define NETLINK_PROTOCOL 30
 #define USER_PORT 100
+#define LOGMSG 0
 
-#define LOG(x...) \
-    pr_info("shelllog: " x)
+#define LOG(buf, tmpbuf, x...) \
+    do { \
+        if(LOGMSG) pr_info("shelllog: " x); \
+        snprintf(tmpbuf, sizeof(tmpbuf), x); \
+        strncat(buf, tmpbuf, sizeof(buf)); \
+    } while(0) 
 
 #define DEBUG(x...) \
     pr_info("shelllog: " x)
@@ -157,7 +162,7 @@ void free_strings(char** ptrs, int size) {
 // extern long __x64_##sym(const struct pt_regs *)
 static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     char *kfilename, *retp;
-    char kpath[0x100];
+    char kpath[0x100], logbuf[0x400], tmpbuf[0x50];
     long len, copylen;
 
     struct pt_regs* execve_regs;
@@ -168,6 +173,8 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     struct task_struct * curr;
     int i;
     
+    memset(logbuf, 0, sizeof(logbuf));
+
     execve_regs = (struct pt_regs*)regs->di;
 
     // 1. 获取路径
@@ -177,34 +184,34 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
     copylen = strncpy_from_user(kfilename, filename, len + 1);
     assert(copylen <= len);
 
-    LOG("===============================\n");
-    LOG("execve path: %s\n", kfilename);
+    LOG(logbuf, tmpbuf, "===============================\n");
+    LOG(logbuf, tmpbuf, "execve path: %s\n", kfilename);
 
     // 2. 获取参数
     kargc = copy_strings(execve_regs->si, &kargv);
     if(kargc < 0)
         return kargc;
 
-    LOG("arguments: \n");
+    LOG(logbuf, tmpbuf, "arguments: \n");
     for(i = 0; i < kargc; i++)
-        LOG("\targv%d: %s\n", i, kargv[i]);
+        LOG(logbuf, tmpbuf, "    argv%d: %s\n", i, kargv[i]);
 
     // 3. 获取环境变量
     kenvc = copy_strings(execve_regs->dx, &kenv);
     if(kenvc < 0)
         return kenvc;
 
-    LOG("environments: \n");
+    LOG(logbuf, tmpbuf, "environments: \n");
     for(i = 0; i < kenvc; i++)
-        LOG("\tenv%d: %s\n", i, kenv[i]);
+        LOG(logbuf, tmpbuf, "    env%d: %s\n", i, kenv[i]);
 
     // 4. 获取 PID
     // linux/include/linux/sched.h task_structs
-    LOG("pid: %d\n", current->pid);
+    LOG(logbuf, tmpbuf, "pid: %d\n", current->pid);
 
     // 5. 获取 cred
     // linux/include/linux/cred.h
-    LOG("uid: %d, gid: %d, suid: %d, sgid: %d,"
+    LOG(logbuf, tmpbuf, "uid: %d, gid: %d, suid: %d, sgid: %d,"
         "euid: %d, egid: %d, fsuid: %d, fsgid: %d\n", 
         current_uid().val, current_gid().val, current_suid().val, current_sgid().val,
         current_euid().val, current_egid().val, current_fsuid().val, current_fsgid().val);
@@ -215,26 +222,27 @@ static int __kprobes log_execve(struct kprobe *p, struct pt_regs *regs) {
         DEBUG("get pwd fail\n");
         return -1;
     }
-    LOG("pwd: %s\n", retp);
+    LOG(logbuf, tmpbuf, "pwd: %s\n", retp);
     // 7. 获取 chroot
     retp = d_path(&current->fs->root, kpath, sizeof(kpath));
     if (IS_ERR(retp)) {
         DEBUG("get pwd fail\n");
         return -1;
     }
-    LOG("root: %s\n", retp);
+    LOG(logbuf, tmpbuf, "root: %s\n", retp);
 
     // 8. 获取 parent tree
-    LOG("Process Tree:\t");
+    LOG(logbuf, tmpbuf, "Process Tree:\n");
     curr = current;
     for(i = 1; curr; i++) {
         // 输出当前进程名与 PID
-        LOG("\t %d: %s(%d)\n", i, curr->comm, curr->pid);
+        LOG(logbuf, tmpbuf, "     %d: %s(%d)\n", i, curr->comm, curr->pid);
         // 将指针更新至父进程
         curr = (curr == curr->real_parent ? NULL : curr->real_parent);
     }
     
-    // TODO 发送信息
+    // 发送信息
+    netlink_send_msg(logbuf, strlen(logbuf) + 1);
 
     // 回收资源
     kfree(kfilename);   
